@@ -1,6 +1,6 @@
 # Live Waste Sorter
 
-![CI](https://github.com/evelan-e/waste-sorter/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/jocelync07/waste-sorter/actions/workflows/ci.yml/badge.svg)](https://github.com/jocelync07/waste-sorter/actions/workflows/ci.yml)
 
 Point a webcam at a drink container and the app says what it is (**aluminium can, glass bottle, HDPE milk bottle or PET plastic bottle**) in real time, so it can go in the right recycling bin.
 
