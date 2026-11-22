@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waste Sorter Monitoring</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Model monitoring</h1>
+    <a href="/">← Classifier</a>
+  </header>
+
+  <main class="monitor">
+    <div class="stats">
+      <div class="stat"><div class="value" id="total">–</div><div class="name">Predictions</div></div>
+      <div class="stat"><div class="value" id="confidence">–</div><div class="name">Average confidence</div></div>
+      <div class="stat"><div class="value" id="low">–</div><div class="name">Low-confidence rate</div></div>
+      <div class="stat"><div class="value" id="latency">–</div><div class="name">Average latency</div></div>
+    </div>
+
+    <section class="panel">
+      <h2>Predictions by class</h2>
+      <div id="classes" class="bars"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent predictions</h2>
+      <table>
+        <thead><tr><th>Time (UTC)</th><th>Source</th><th>Class</th><th>Confidence</th><th>Latency</th></tr></thead>
+        <tbody id="recent"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/monitor.js"></script>
+</body>
+</html>

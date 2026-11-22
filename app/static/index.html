@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Waste Sorter</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Live Waste Sorter</h1>
+    <a href="/monitor">Monitoring →</a>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Camera</h2>
+      <video id="video" autoplay playsinline muted></video>
+      <img id="preview" alt="Uploaded image">
+      <div class="controls">
+        <button id="start" class="primary">Start camera</button>
+        <button id="snap" disabled>Classify frame</button>
+        <label class="toggle"><input type="checkbox" id="live" disabled> Live (every second)</label>
+        <label class="upload-label">Upload image<input type="file" id="upload" accept="image/*"></label>
+      </div>
+    </section>
+
+    <section class="panel" aria-live="polite">
+      <h2>Prediction</h2>
+      <p id="untrained" class="notice hidden">No trained model is loaded, so these predictions are random. Run <code>scripts/train.py</code> first.</p>
+      <p id="uncertain" class="notice hidden">Low confidence: try better light or move the item closer.</p>
+      <p id="label" class="result-label">–</p>
+      <p id="meta" class="result-meta">Start the camera or upload a photo of a drink container.</p>
+      <div id="bars" class="bars"></div>
+      <p id="error" class="notice hidden"></p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
