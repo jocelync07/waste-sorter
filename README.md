@@ -10,17 +10,62 @@ It takes an image classifier I built for a university computer-vision assignment
 
 ## Results
 
-Served model: ResNet18 transfer learning, with 150 extra webcam images of HDPE bottles and augmentation to balance the classes. Scores are on a held-out test set of 620 images the model never saw (seed 42, from `models/metrics.json`).
+The served model is ResNet18, pre-trained on ImageNet, with its **last residual block (layer4) fine-tuned** and a new final layer. It was chosen from three configurations on the devtest set, then scored once on a held-out test set of 620 images it never saw (seed 42, from [`models/metrics.json`](models/metrics.json)).
 
 | Class | Recall | Precision |
 |---|---|---|
-| Aluminium can | 0.965 | 0.955 |
-| Glass bottle | 0.930 | 0.916 |
-| HDPE milk bottle | 0.750 | 0.938 |
-| PET plastic bottle | 0.965 | 0.970 |
-| **Overall** | **Accuracy 0.947** | **Macro-F1 0.921** |
+| Aluminium can | 0.995 | 0.995 |
+| Glass bottle | 0.985 | 0.990 |
+| HDPE milk bottle | 0.850 | 0.895 |
+| PET plastic bottle | 1.000 | 0.990 |
+| **Overall** | **Accuracy 0.989** | **Macro-F1 0.962** |
 
-HDPE is still the hardest class: the test set has only 20 HDPE images, so its recall moves a lot with each mistake. More real HDPE photos would help more than more augmentation.
+![Test confusion matrix](docs/confusion_matrix.png)
+
+HDPE is still the weakest class: 17 of its 20 test images are right, and 3 are taken for glass or an aluminium can. With only 20 HDPE test images, each mistake moves its recall by 5 points.
+
+### Choosing the training setup
+
+Three configurations were trained on the same split and compared on **devtest** only. The best was chosen by macro-F1, which weighs the rare HDPE class as much as the others; the test set was not used to choose.
+
+| Configuration | What is trained | Learning rate | Best epoch | Devtest accuracy | Devtest macro-F1 | Devtest HDPE recall |
+|---|---|---|---|---|---|---|
+| `head-lr1e-3` | final layer only | 1e-3 | 30 of 30 | 0.958 | 0.932 | 0.80 |
+| `head-lr1e-4` | final layer only | 1e-4 | 30 of 30 | 0.923 | 0.860 | 0.60 |
+| **`finetune-l4`** | **layer4 + final layer** | **1e-4 (layer4), 1e-3 (final)** | **7 of 10** | **0.981** | **0.968** | **0.90** |
+
+![Configurations compared on devtest](docs/config_comparison.png)
+
+- **Learning rate:** with the backbone frozen, 1e-4 was too slow and was still improving at epoch 30. 1e-3 learned much faster and scored higher.
+- **Fine-tuning:** also training layer4 gave the biggest gain, especially for HDPE (recall 0.80 → 0.90). A frozen ImageNet backbone was never taught what makes a matte white milk bottle different from glass or PET. Letting the last block adapt fixes much of that. Layer4 uses a 10× smaller learning rate than the new final layer, so the pre-trained weights change gently instead of being overwritten. Its BatchNorm statistics are kept from ImageNet, because the batches are small.
+
+### Fixing the rare HDPE class
+
+The dataset has 1,000 images each of cans, glass and PET, but only 100 of HDPE. Three steps were taken, and the devtest scores above show their combined effect:
+
+1. **More real data:** 150 extra HDPE photos, added to the training set only (see [Data](#data)).
+2. **Augmentation:** HDPE training images are augmented until every class has 600 (chart below).
+3. **Fine-tuning layer4:** the largest single improvement in HDPE recall.
+
+![Training-set class distribution before and after balancing](docs/class_distribution.png)
+
+Augmentations, each copying a change that happens in real use:
+
+| Transform | Why |
+|---|---|
+| Colour jitter (±20% brightness, contrast, saturation) | Different room lighting and camera white balance |
+| Small rotation, shift and zoom | The bottle slightly tilted, off-centre, nearer or further away |
+| Horizontal flip | A bottle has no meaningful left or right side |
+| Vertical flip | In a bin or on a sorting belt, containers lie upside down as often as upright. The shape, cap and label cues stay the same |
+| Light Gaussian blur | Webcam frames are softer than the dataset's product photos |
+
+Next steps for HDPE, if more is needed: collect more real HDPE photos for devtest and test (20 is too few to measure well), and try a class-weighted loss without augmentation as another comparison.
+
+## Data
+
+- **Dataset:** [Drinking Waste Classification](https://www.kaggle.com/datasets/arkadiyhacks/drinking-waste-classification) (Kaggle), with the 3,100-image subset listed in `waste_dataset.csv` (1,000 AluCan, 1,000 Glass, 100 HDPEM, 1,000 PET).
+- **Split:** 60/20/20 train/devtest/test, done separately for each class so every partition keeps the same class mix. It uses a fixed seed (42), so it is the same on every run. The exact split is saved in [`models/splits/`](models/splits/).
+- **Extra HDPE photos:** 150 photos of HDPE milk bottles that I captured, named `new_HDPEM1.jpg` to `new_HDPEM150.jpg`. They were taken in bursts of 10 frames, 1 second apart. Between bursts the bottle, background, lighting, position, distance and orientation were changed, so the photos are not near-copies. Image sizes range from 384×512 to 1600×1200. They go into the **training set only**, so devtest and test stay comparable with the original dataset. The photos are not in this repository. Put them in `data/new_HDPEM/` and pass `--extra-hdpem data/new_HDPEM`.
 
 ## How it works
 
@@ -39,8 +84,8 @@ HDPE is still the hardest class: the test set has only 20 HDPE images, so its re
  /monitor page: prediction counts, average confidence, low-confidence rate, latency
 ```
 
-- **Model:** ResNet18 pre-trained on ImageNet, backbone frozen, final layer trained on the [Drinking Waste Classification](https://www.kaggle.com/datasets/arkadiyhacks/drinking-waste-classification) dataset. The rare HDPE class was boosted with my own webcam photos and data augmentation.
-- **Training:** `scripts/train.py` caches the frozen backbone's features once, so the whole model trains in minutes on a laptop CPU.
+- **Model:** ResNet18 pre-trained on ImageNet, with layer4 fine-tuned and a new four-class final layer (see [Results](#results)).
+- **Training:** `scripts/train.py` caches the output of the frozen layers (conv1 to layer3) once per image, so all three configurations train in about 5 minutes on a laptop CPU.
 - **Serving:** FastAPI loads the model once at startup. Uploads are checked for size and type; unreadable files get a 400, not a crash.
 - **Monitoring:** every prediction is logged (without the image) and summarised on `/monitor`, so you can spot when the model is often unsure.
 
@@ -69,10 +114,18 @@ pip install -r requirements-dev.txt
 Download the dataset and `waste_dataset.csv`, then:
 
 ```bash
+pip install -r requirements-train.txt
 python scripts/train.py --data-root path/to/rawimgs --csv path/to/waste_dataset.csv --extra-hdpem data/new_HDPEM
 ```
 
-This writes `models/waste_resnet18.pth` (about 45 MB) and `models/metrics.json`.
+This trains all three configurations and writes:
+
+- `models/waste_resnet18.pth`: the chosen model (about 45 MB)
+- `models/metrics.json`: devtest results for every configuration, and test results for the chosen one
+- `models/splits/`: the exact train/devtest/test split
+- `docs/*.png`: the charts in this README
+
+Use `--configs finetune-l4` to train only one configuration, or `--charts-only` to redraw the charts from `metrics.json`.
 
 ### 2. Start the app
 
@@ -112,8 +165,10 @@ app/
   monitor.py     prediction log and statistics
   config.py      settings from environment variables
   static/        webcam page and monitoring page
-scripts/train.py training, evaluation and export
-tests/           pytest tests for the model and the API
+scripts/train.py split, configuration comparison, evaluation, charts and export
+models/          trained model, metrics.json and the saved split
+docs/            charts used in this README
+tests/           pytest tests for the model, the API and the training helpers
 .github/workflows/ci.yml   tests and Docker build on every push
 ```
 
@@ -125,5 +180,6 @@ tests/           pytest tests for the model and the API
 ## What I learned
 
 - Taking a model from a notebook to a service: one shared preprocessing function for training and serving, loading the model once, and validating inputs.
+- Choosing settings fairly: compare configurations on devtest, then touch the test set once. Fine-tuning one block did more for the rare class than any amount of training the final layer alone.
 - Why monitoring matters: a lab test-set score does not show how the model does on a real webcam, but confidence and low-confidence rates do.
 - Packaging with Docker and checking every change with CI.
